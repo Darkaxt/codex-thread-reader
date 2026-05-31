@@ -38,4 +38,34 @@ public sealed class RolloutParserTests
         Assert.Contains(parsed.Messages, m => m.Kind == TranscriptEntryKind.ToolOutput && m.Text.Contains("ok"));
         Assert.Contains(parsed.Messages, m => m.Kind == TranscriptEntryKind.Compaction && m.Text == "Earlier context summary");
     }
+
+    [Fact]
+    public async Task ParsePageAsync_returns_requested_message_window_and_reports_has_more()
+    {
+        var root = Directory.CreateTempSubdirectory("ctr-rollout-page-");
+        var rolloutPath = Path.Combine(root.FullName, "rollout-2026-01-02T03-04-05-thread-1.jsonl");
+        await File.WriteAllLinesAsync(
+            rolloutPath,
+            new[]
+            {
+                """{"timestamp":"2026-01-02T03:04:05Z","type":"session_meta","payload":{"id":"thread-1","timestamp":"2026-01-02T03:04:05Z","cwd":"C:\\repo","originator":"Codex Desktop","cli_version":"0.1.0","source":"vscode","model_provider":"openai"}}""",
+                """{"timestamp":"2026-01-02T03:04:06Z","type":"event_msg","payload":{"type":"user_message","message":"one"}}""",
+                """{"timestamp":"2026-01-02T03:04:07Z","type":"event_msg","payload":{"type":"agent_message","message":"two","phase":"final"}}""",
+                """{"timestamp":"2026-01-02T03:04:08Z","type":"event_msg","payload":{"type":"user_message","message":"three"}}""",
+                """{"timestamp":"2026-01-02T03:04:09Z","type":"event_msg","payload":{"type":"agent_message","message":"four","phase":"final"}}"""
+            },
+            CancellationToken.None);
+
+        var page = await RolloutParser.ParsePageAsync(rolloutPath, skipMessages: 1, takeMessages: 2, CancellationToken.None);
+
+        Assert.Equal(new[] { "two", "three" }, page.Messages.Select(message => message.Text));
+        Assert.True(page.HasMore);
+        Assert.Equal(1, page.SkipMessages);
+        Assert.Equal(2, page.TakeMessages);
+
+        var finalPage = await RolloutParser.ParsePageAsync(rolloutPath, skipMessages: 3, takeMessages: 2, CancellationToken.None);
+
+        Assert.Equal(new[] { "four" }, finalPage.Messages.Select(message => message.Text));
+        Assert.False(finalPage.HasMore);
+    }
 }

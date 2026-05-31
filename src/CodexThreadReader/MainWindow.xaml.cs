@@ -6,12 +6,15 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace CodexThreadReader;
 
 public partial class MainWindow : Window
 {
+    private const int ChatPageSize = 100;
+
     private readonly ObservableCollection<ThreadRowViewModel> _allThreads = [];
     private readonly ObservableCollection<SidebarGroupViewModel> _sidebarGroups = [];
     private readonly string _settingsRoot;
@@ -23,6 +26,8 @@ public partial class MainWindow : Window
     private ThemePalette _palette = ThemePalette.Light;
     private CancellationTokenSource? _previewCancellation;
     private ThreadRowViewModel? _selectedThread;
+    private ParsedThreadPage? _currentPage;
+    private int _currentPageIndex;
     private bool _initializingTheme;
 
     public MainWindow()
@@ -76,7 +81,7 @@ public partial class MainWindow : Window
         ApplyTheme(mode);
         if (_selectedThread is not null)
         {
-            await LoadPreviewAsync(_selectedThread);
+            await LoadPreviewPageAsync(_selectedThread, _currentPageIndex);
         }
     }
 
@@ -228,15 +233,25 @@ public partial class MainWindow : Window
         };
     }
 
-    private async Task LoadPreviewAsync(ThreadRowViewModel? selected)
+    private Task LoadPreviewAsync(ThreadRowViewModel? selected)
+    {
+        return LoadPreviewPageAsync(selected, pageIndex: 0);
+    }
+
+    private async Task LoadPreviewPageAsync(ThreadRowViewModel? selected, int pageIndex)
     {
         _previewCancellation?.Cancel();
-        ChatItemsControl.ItemsSource = null;
+        pageIndex = Math.Max(0, pageIndex);
+        _currentPage = null;
+        _currentPageIndex = pageIndex;
+        ChatListBox.ItemsSource = null;
+        ChatListBox.SelectedIndex = -1;
         DetailTitleTextBlock.Text = string.Empty;
         DetailMetaTextBlock.Text = string.Empty;
         DetailFlagsTextBlock.Text = string.Empty;
         ExportButton.IsEnabled = false;
         RemoveAnchorButton.IsEnabled = false;
+        UpdateChatNavigationState();
 
         if (selected is null)
         {
@@ -253,18 +268,30 @@ public partial class MainWindow : Window
         if (!selected.Summary.RolloutExists)
         {
             PreviewStatusTextBlock.Text = "No rollout file exists for this catalog row.";
+            UpdateChatNavigationState();
             return;
         }
 
         var cancellation = new CancellationTokenSource();
         _previewCancellation = cancellation;
-        PreviewStatusTextBlock.Text = "Loading chat preview...";
+        PreviewStatusTextBlock.Text = $"Loading chat page {pageIndex + 1}...";
         try
         {
-            var parsed = await RolloutParser.ParseAsync(selected.Summary.RolloutPath, maxMessages: 300, cancellation.Token);
-            ChatItemsControl.ItemsSource = parsed.Messages.Select(entry => ChatMessageViewModel.FromTranscriptEntry(entry, _palette)).ToArray();
-            PreviewStatusTextBlock.Text = $"Preview entries: {parsed.Messages.Count}. Parsed lines: {parsed.Report.ParsedLines}. Invalid lines: {parsed.Report.InvalidLines}. Export parses the full rollout.";
-            ChatScrollViewer.ScrollToTop();
+            var skipMessages = pageIndex * ChatPageSize;
+            var parsed = await RolloutParser.ParsePageAsync(selected.Summary.RolloutPath, skipMessages, ChatPageSize, cancellation.Token);
+            _currentPage = parsed;
+            _currentPageIndex = pageIndex;
+            var messages = parsed.Messages.Select(entry => ChatMessageViewModel.FromTranscriptEntry(entry, _palette)).ToArray();
+            ChatListBox.ItemsSource = messages;
+            if (messages.Length > 0)
+            {
+                ChatListBox.SelectedIndex = 0;
+                ChatListBox.UpdateLayout();
+                ChatListBox.ScrollIntoView(messages[0]);
+            }
+
+            PreviewStatusTextBlock.Text = BuildPreviewStatus(parsed);
+            UpdateChatNavigationState();
         }
         catch (OperationCanceledException)
         {
@@ -272,7 +299,132 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             PreviewStatusTextBlock.Text = $"Preview failed: {ex.Message}";
+            UpdateChatNavigationState();
         }
+    }
+
+    private static string BuildPreviewStatus(ParsedThreadPage page)
+    {
+        if (page.Messages.Count == 0)
+        {
+            return $"Page {page.SkipMessages / page.TakeMessages + 1}: no entries. Parsed lines: {page.Report.ParsedLines}. Invalid lines: {page.Report.InvalidLines}. Export parses the full rollout.";
+        }
+
+        var firstEntry = page.SkipMessages + 1;
+        var lastEntry = page.SkipMessages + page.Messages.Count;
+        var moreText = page.HasMore ? "more available" : "end of thread";
+        return $"Page {page.SkipMessages / page.TakeMessages + 1}: entries {firstEntry}-{lastEntry}, {moreText}. Parsed lines: {page.Report.ParsedLines}. Invalid lines: {page.Report.InvalidLines}. Export parses the full rollout.";
+    }
+
+    private async void FirstPageButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedThread is not null)
+        {
+            await LoadPreviewPageAsync(_selectedThread, pageIndex: 0);
+        }
+    }
+
+    private async void PreviousPageButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedThread is not null)
+        {
+            await LoadPreviewPageAsync(_selectedThread, Math.Max(0, _currentPageIndex - 1));
+        }
+    }
+
+    private async void NextPageButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedThread is not null && _currentPage?.HasMore == true)
+        {
+            await LoadPreviewPageAsync(_selectedThread, _currentPageIndex + 1);
+        }
+    }
+
+    private void TopMessageButton_Click(object sender, RoutedEventArgs e)
+    {
+        ScrollToChatIndex(0);
+    }
+
+    private void PreviousMessageButton_Click(object sender, RoutedEventArgs e)
+    {
+        ScrollToChatIndex(ChatNavigation.Previous(ChatListBox.SelectedIndex, ChatListBox.Items.Count));
+    }
+
+    private void NextMessageButton_Click(object sender, RoutedEventArgs e)
+    {
+        ScrollToChatIndex(ChatNavigation.Next(ChatListBox.SelectedIndex, ChatListBox.Items.Count));
+    }
+
+    private void BottomMessageButton_Click(object sender, RoutedEventArgs e)
+    {
+        ScrollToChatIndex(ChatListBox.Items.Count - 1);
+    }
+
+    private void ChatListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateChatNavigationState();
+    }
+
+    private void ChatDocument_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        var scrollViewer = FindVisualChild<ScrollViewer>(ChatListBox);
+        if (scrollViewer is null)
+        {
+            return;
+        }
+
+        scrollViewer.ScrollToVerticalOffset(Math.Max(0, scrollViewer.VerticalOffset - e.Delta));
+        e.Handled = true;
+    }
+
+    private void ScrollToChatIndex(int index)
+    {
+        if (ChatListBox.Items.Count == 0)
+        {
+            return;
+        }
+
+        var targetIndex = Math.Clamp(index, 0, ChatListBox.Items.Count - 1);
+        ChatListBox.SelectedIndex = targetIndex;
+        ChatListBox.UpdateLayout();
+        ChatListBox.ScrollIntoView(ChatListBox.Items[targetIndex]);
+        UpdateChatNavigationState();
+    }
+
+    private void UpdateChatNavigationState()
+    {
+        var hasThread = _selectedThread?.Summary.RolloutExists == true;
+        var hasItems = ChatListBox.Items.Count > 0;
+        var selectedIndex = ChatListBox.SelectedIndex;
+
+        FirstPageButton.IsEnabled = hasThread && _currentPageIndex > 0;
+        PreviousPageButton.IsEnabled = hasThread && _currentPageIndex > 0;
+        NextPageButton.IsEnabled = hasThread && _currentPage?.HasMore == true;
+        TopMessageButton.IsEnabled = hasItems && selectedIndex > 0;
+        PreviousMessageButton.IsEnabled = hasItems && selectedIndex > 0;
+        NextMessageButton.IsEnabled = hasItems && selectedIndex >= 0 && selectedIndex < ChatListBox.Items.Count - 1;
+        BottomMessageButton.IsEnabled = hasItems && selectedIndex >= 0 && selectedIndex < ChatListBox.Items.Count - 1;
+        MessagePositionTextBlock.Text = hasItems && selectedIndex >= 0 ? $"{selectedIndex + 1}/{ChatListBox.Items.Count}" : "-";
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T typedChild)
+            {
+                return typedChild;
+            }
+
+            var nestedChild = FindVisualChild<T>(child);
+            if (nestedChild is not null)
+            {
+                return nestedChild;
+            }
+        }
+
+        return null;
     }
 
     private void SetBusy(bool isBusy, string? status = null)

@@ -264,6 +264,12 @@
             </Setter>
         </Style>
 
+        <Style TargetType="ListBox">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="{DynamicResource SidebarBackgroundBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource ThumbBrush}" />
@@ -450,9 +456,48 @@
                 </Grid>
             </Border>
 
-            <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="28,22" VerticalScrollBarVisibility="Auto" Background="{DynamicResource WindowBackgroundBrush}">
-                <ItemsControl x:Name="ChatItemsControl">
-                    <ItemsControl.ItemTemplate>
+            <Border Grid.Row="1" Padding="28,22" Background="{DynamicResource WindowBackgroundBrush}">
+                <ListBox x:Name="ChatListBox"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         SelectionChanged="ChatListBox_SelectionChanged"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.CanContentScroll="False">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderBrush" Value="Transparent" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="ItemBorder"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource SelectionBrush}" />
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="0,0,0,18">
                                 <Border MaxWidth="780"
@@ -469,17 +514,34 @@
                                                                   VerticalScrollBarVisibility="Disabled"
                                                                   HorizontalScrollBarVisibility="Disabled"
                                                                   Background="Transparent"
-                                                                  Focusable="False" />
+                                                                  Focusable="False"
+                                                                  PreviewMouseWheel="ChatDocument_PreviewMouseWheel" />
                                     </StackPanel>
                                 </Border>
                             </Grid>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
 
             <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="24,12" Background="{DynamicResource PanelBackgroundBrush}">
-                <TextBlock x:Name="PreviewStatusTextBlock" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" TextWrapping="Wrap" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" x:Name="PreviewStatusTextBlock" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <Button x:Name="FirstPageButton" Content="First page" Click="FirstPageButton_Click" IsEnabled="False" />
+                        <Button x:Name="PreviousPageButton" Content="Prev page" Margin="6,0,0,0" Click="PreviousPageButton_Click" IsEnabled="False" />
+                        <Button x:Name="NextPageButton" Content="Next page" Margin="6,0,12,0" Click="NextPageButton_Click" IsEnabled="False" />
+                        <Button x:Name="TopMessageButton" Content="Top" Click="TopMessageButton_Click" IsEnabled="False" />
+                        <Button x:Name="PreviousMessageButton" Content="Prev" Margin="6,0,0,0" Click="PreviousMessageButton_Click" IsEnabled="False" />
+                        <TextBlock x:Name="MessagePositionTextBlock" Text="-" Width="54" TextAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" Margin="6,0" />
+                        <Button x:Name="NextMessageButton" Content="Next" Click="NextMessageButton_Click" IsEnabled="False" />
+                        <Button x:Name="BottomMessageButton" Content="Bottom" Margin="6,0,0,0" Click="BottomMessageButton_Click" IsEnabled="False" />
+                    </StackPanel>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

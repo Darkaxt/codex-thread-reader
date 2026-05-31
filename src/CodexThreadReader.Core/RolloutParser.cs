@@ -12,11 +12,43 @@ public static class RolloutParser
 
     public static async Task<ParsedThread> ParseAsync(string rolloutPath, int? maxMessages, CancellationToken cancellationToken)
     {
+        var page = await ParseInternalAsync(rolloutPath, skipMessages: 0, takeMessages: maxMessages, detectHasMore: false, cancellationToken);
+        return new ParsedThread(page.Metadata, page.Messages, page.Report);
+    }
+
+    public static async Task<ParsedThreadPage> ParsePageAsync(
+        string rolloutPath,
+        int skipMessages,
+        int takeMessages,
+        CancellationToken cancellationToken)
+    {
+        if (skipMessages < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(skipMessages), "Skip count cannot be negative.");
+        }
+
+        if (takeMessages <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(takeMessages), "Page size must be positive.");
+        }
+
+        return await ParseInternalAsync(rolloutPath, skipMessages, takeMessages, detectHasMore: true, cancellationToken);
+    }
+
+    private static async Task<ParsedThreadPage> ParseInternalAsync(
+        string rolloutPath,
+        int skipMessages,
+        int? takeMessages,
+        bool detectHasMore,
+        CancellationToken cancellationToken)
+    {
         var messages = new List<TranscriptEntry>();
         RolloutMetadata? metadata = null;
         var totalLines = 0;
         var parsedLines = 0;
         var invalidLines = 0;
+        var seenMessages = 0;
+        var hasMore = false;
 
         await foreach (var parsedLine in ReadJsonLinesAsync(rolloutPath, cancellationToken))
         {
@@ -37,32 +69,58 @@ public static class RolloutParser
                 continue;
             }
 
+            var lineMessages = new List<TranscriptEntry>();
             switch (type)
             {
                 case "session_meta":
                     metadata ??= ReadMetadata(payload);
                     break;
                 case "event_msg":
-                    AddEventMessage(messages, parsedLine.LineNumber, timestamp, payload);
+                    AddEventMessage(lineMessages, parsedLine.LineNumber, timestamp, payload);
                     break;
                 case "response_item":
-                    AddResponseItem(messages, parsedLine.LineNumber, timestamp, payload);
+                    AddResponseItem(lineMessages, parsedLine.LineNumber, timestamp, payload);
                     break;
                 case "compacted":
-                    AddCompaction(messages, parsedLine.LineNumber, timestamp, payload);
+                    AddCompaction(lineMessages, parsedLine.LineNumber, timestamp, payload);
                     break;
                 case "turn_context":
-                    AddTurnContext(messages, parsedLine.LineNumber, timestamp, payload);
+                    AddTurnContext(lineMessages, parsedLine.LineNumber, timestamp, payload);
                     break;
             }
 
-            if (maxMessages is not null && messages.Count >= maxMessages.Value && metadata is not null)
+            foreach (var message in lineMessages)
+            {
+                if (seenMessages < skipMessages)
+                {
+                    seenMessages++;
+                    continue;
+                }
+
+                if (takeMessages is null || messages.Count < takeMessages.Value)
+                {
+                    messages.Add(message);
+                    seenMessages++;
+                    continue;
+                }
+
+                hasMore = true;
+                break;
+            }
+
+            if (hasMore || (takeMessages is not null && !detectHasMore && messages.Count >= takeMessages.Value && metadata is not null))
             {
                 break;
             }
         }
 
-        return new ParsedThread(metadata, messages, new ParseReport(totalLines, parsedLines, invalidLines, 0));
+        return new ParsedThreadPage(
+            metadata,
+            messages,
+            new ParseReport(totalLines, parsedLines, invalidLines, 0),
+            skipMessages,
+            takeMessages ?? messages.Count,
+            hasMore);
     }
 
     public static async Task<RolloutMetadata?> ReadMetadataAsync(string rolloutPath, CancellationToken cancellationToken)

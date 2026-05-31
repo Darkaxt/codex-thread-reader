@@ -22,6 +22,7 @@ It does not write to `.codex`, repair Codex state, or call Codex APIs.
 - Resolves sidebar titles from Codex's session index or rollout title events before falling back to compacted SQLite text.
 - Supports System, Light, and Dark theme modes.
 - Renders conversation messages as Markdown in the chat preview while keeping tool output as plain monospace text.
+- Pages the chat preview with per-page message navigation so long rollouts remain scrollable and precise.
 - Streams rollout JSONL so very large thread files are not loaded as raw text.
 - Exports selected threads as:
   - `thread.html`

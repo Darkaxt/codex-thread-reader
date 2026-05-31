@@ -70,6 +70,14 @@ public sealed record ParsedThread(
     IReadOnlyList<TranscriptEntry> Messages,
     ParseReport Report);
 
+public sealed record ParsedThreadPage(
+    RolloutMetadata? Metadata,
+    IReadOnlyList<TranscriptEntry> Messages,
+    ParseReport Report,
+    int SkipMessages,
+    int TakeMessages,
+    bool HasMore);
+
 public sealed record ExportManifest(
     string ExportDirectory,
     string HtmlPath,
