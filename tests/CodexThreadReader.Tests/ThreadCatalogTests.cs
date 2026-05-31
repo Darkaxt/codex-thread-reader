@@ -49,9 +49,46 @@ public sealed class ThreadCatalogTests
         Assert.Empty(result.Errors);
     }
 
-    private static async Task WriteRolloutAsync(string path, string id, string cwd)
+    [Fact]
+    public async Task LoadAsync_prefers_session_index_thread_name_over_full_sqlite_prompt_title()
     {
-        var line = JsonSerializer.Serialize(new
+        var codexHome = Directory.CreateTempSubdirectory("ctr-title-index-");
+        Directory.CreateDirectory(Path.Combine(codexHome.FullName, "sessions", "2026", "01", "02"));
+        var rolloutPath = Path.Combine(codexHome.FullName, "sessions", "2026", "01", "02", "rollout-2026-01-02T03-04-05-title-id.jsonl");
+        await WriteRolloutAsync(rolloutPath, "title-id", "C:\\repo");
+        await CreateStateDatabaseAsync(
+            Path.Combine(codexHome.FullName, "state_5.sqlite"),
+            new ThreadRow("title-id", "Context:\n```\nA very long prompt body that should not become the sidebar title.\n```", "C:\\repo", false, rolloutPath, 10, 20));
+        await File.WriteAllTextAsync(
+            Path.Combine(codexHome.FullName, "session_index.jsonl"),
+            """{"id":"title-id","thread_name":"Short recovered title","updated_at":20}""" + Environment.NewLine,
+            CancellationToken.None);
+
+        var result = await ThreadCatalog.LoadAsync(new ThreadCatalogOptions(codexHome.FullName), CancellationToken.None);
+
+        Assert.Contains(result.Threads, thread => thread.Id == "title-id" && thread.Title == "Short recovered title");
+    }
+
+    [Fact]
+    public async Task LoadAsync_uses_rollout_thread_name_when_sqlite_title_is_full_prompt_and_index_has_no_title()
+    {
+        var codexHome = Directory.CreateTempSubdirectory("ctr-title-rollout-");
+        Directory.CreateDirectory(Path.Combine(codexHome.FullName, "sessions", "2026", "01", "02"));
+        var rolloutPath = Path.Combine(codexHome.FullName, "sessions", "2026", "01", "02", "rollout-2026-01-02T03-04-05-rollout-title-id.jsonl");
+        await WriteRolloutAsync(rolloutPath, "rollout-title-id", "C:\\repo", "Title from rollout event");
+        await CreateStateDatabaseAsync(
+            Path.Combine(codexHome.FullName, "state_5.sqlite"),
+            new ThreadRow("rollout-title-id", "Task:\n```\nFull task body should not be used as the node label.\n```", "C:\\repo", false, rolloutPath, 10, 20));
+
+        var result = await ThreadCatalog.LoadAsync(new ThreadCatalogOptions(codexHome.FullName), CancellationToken.None);
+
+        Assert.Contains(result.Threads, thread => thread.Id == "rollout-title-id" && thread.Title == "Title from rollout event");
+    }
+
+    private static async Task WriteRolloutAsync(string path, string id, string cwd, string? threadName = null)
+    {
+        var lines = new List<string>();
+        lines.Add(JsonSerializer.Serialize(new
         {
             timestamp = "2026-01-02T03:04:05Z",
             type = "session_meta",
@@ -65,8 +102,23 @@ public sealed class ThreadCatalogTests
                 source = "vscode",
                 model_provider = "openai"
             }
-        });
-        await File.WriteAllTextAsync(path, line + Environment.NewLine, CancellationToken.None);
+        }));
+        if (!string.IsNullOrWhiteSpace(threadName))
+        {
+            lines.Add(JsonSerializer.Serialize(new
+            {
+                timestamp = "2026-01-02T03:04:06Z",
+                type = "event_msg",
+                payload = new
+                {
+                    type = "thread_name_updated",
+                    thread_id = id,
+                    thread_name = threadName
+                }
+            }));
+        }
+
+        await File.WriteAllTextAsync(path, string.Join(Environment.NewLine, lines) + Environment.NewLine, CancellationToken.None);
     }
 
     private static async Task CreateStateDatabaseAsync(string path, params ThreadRow[] rows)

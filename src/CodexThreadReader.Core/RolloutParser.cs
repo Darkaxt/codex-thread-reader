@@ -90,6 +90,42 @@ public static class RolloutParser
         return null;
     }
 
+    public static async Task<string?> ReadThreadNameAsync(string rolloutPath, int maxLines, CancellationToken cancellationToken)
+    {
+        string? threadName = null;
+        await foreach (var parsedLine in ReadJsonLinesAsync(rolloutPath, cancellationToken))
+        {
+            if (parsedLine.LineNumber > maxLines)
+            {
+                break;
+            }
+
+            if (parsedLine.Document is null)
+            {
+                continue;
+            }
+
+            using var document = parsedLine.Document;
+            var root = document.RootElement;
+            if (GetString(root, "type") != "event_msg")
+            {
+                continue;
+            }
+
+            if (!root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (GetString(payload, "type") == "thread_name_updated")
+            {
+                threadName = GetString(payload, "thread_name") ?? threadName;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(threadName) ? null : threadName;
+    }
+
     private static async IAsyncEnumerable<ParsedJsonLine> ReadJsonLinesAsync(
         string path,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)

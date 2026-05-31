@@ -16,8 +16,11 @@ It does not write to `.codex`, repair Codex state, or call Codex APIs.
 ## Features
 
 - Enumerates active, archived, hidden, and rollout-only threads.
+- Groups threads by Codex project root, with anchored threads sorted first inside their project.
 - Shows recovery flags such as `Anchored`, `Archived`, `MissingFromSessionIndex`, `ExtendedPath`, `RolloutOnly`, `DbOnlyMissingFile`, and `LargeRollout`.
 - Lets you persistently anchor a thread ID at the top of the list even when Codex Desktop cannot show it.
+- Resolves sidebar titles from Codex's session index or rollout title events before falling back to compacted SQLite text.
+- Supports System, Light, and Dark theme modes.
 - Streams rollout JSONL so very large thread files are not loaded as raw text.
 - Exports selected threads as:
   - `thread.html`

@@ -7,13 +7,14 @@ namespace CodexThreadReader.Core;
 public static partial class ThreadCatalog
 {
     private const long LargeRolloutThresholdBytes = 512L * 1024L * 1024L;
+    private const int MaxRolloutTitleScanLines = 2_000;
 
     public static async Task<ThreadCatalogResult> LoadAsync(ThreadCatalogOptions options, CancellationToken cancellationToken)
     {
         var errors = new List<string>();
         var summaries = new Dictionary<string, ThreadSummary>(StringComparer.OrdinalIgnoreCase);
         var rolloutPathsById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var sessionIndexIds = await LoadSessionIndexIdsAsync(options.CodexHome, cancellationToken);
+        var sessionIndex = await LoadSessionIndexAsync(options.CodexHome, cancellationToken);
         var anchorStore = string.IsNullOrWhiteSpace(options.AnchorStorePath)
             ? new AnchorStore(string.Empty, Array.Empty<string>())
             : await AnchorStore.LoadAsync(options.AnchorStorePath, cancellationToken);
@@ -24,7 +25,7 @@ public static partial class ThreadCatalog
         {
             try
             {
-                await LoadSqliteThreadsAsync(dbPath, sessionIndexIds, anchoredIds, summaries, rolloutPathsById, cancellationToken);
+                await LoadSqliteThreadsAsync(dbPath, sessionIndex, anchoredIds, summaries, rolloutPathsById, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -36,7 +37,7 @@ public static partial class ThreadCatalog
             errors.Add($"state_5.sqlite was not found at {dbPath}");
         }
 
-        await LoadRolloutOnlyThreadsAsync(options.CodexHome, sessionIndexIds, anchoredIds, summaries, rolloutPathsById, errors, cancellationToken);
+        await LoadRolloutOnlyThreadsAsync(options.CodexHome, sessionIndex, anchoredIds, summaries, rolloutPathsById, errors, cancellationToken);
         AddMissingAnchors(anchoredIds, summaries);
 
         var anchorOrder = anchorStore.ThreadIds
@@ -55,7 +56,7 @@ public static partial class ThreadCatalog
 
     private static async Task LoadSqliteThreadsAsync(
         string dbPath,
-        ISet<string> sessionIndexIds,
+        SessionIndexInfo sessionIndex,
         ISet<string> anchoredIds,
         IDictionary<string, ThreadSummary> summaries,
         IDictionary<string, string> rolloutPathsById,
@@ -74,20 +75,21 @@ public static partial class ThreadCatalog
         while (await reader.ReadAsync(cancellationToken))
         {
             var id = reader.GetString(0);
-            var title = reader.GetString(1);
+            var rawTitle = reader.GetString(1);
             var cwd = reader.GetString(2);
             var archived = reader.GetInt32(3) != 0;
             var createdAt = FromUnixSeconds(reader.GetInt64(4));
             var updatedAt = FromUnixSeconds(reader.GetInt64(5));
             var rolloutPath = PathUtilities.StripExtendedPrefix(reader.GetString(6));
             var rolloutExists = File.Exists(rolloutPath);
-            var flags = BuildFlags(id, cwd, rolloutPath, archived, rolloutExists, sessionIndexIds, anchoredIds, false);
+            var flags = BuildFlags(id, cwd, rolloutPath, archived, rolloutExists, sessionIndex.Ids, anchoredIds, false);
             var size = rolloutExists ? new FileInfo(rolloutPath).Length : 0;
             if (size >= LargeRolloutThresholdBytes && !flags.Contains(RecoveryFlag.LargeRollout))
             {
                 flags.Add(RecoveryFlag.LargeRollout);
             }
 
+            var title = await ResolveTitleAsync(id, rawTitle, rolloutPath, rolloutExists, sessionIndex.ThreadNames, cancellationToken);
             var summary = new ThreadSummary(
                 id,
                 title,
@@ -111,7 +113,7 @@ public static partial class ThreadCatalog
 
     private static async Task LoadRolloutOnlyThreadsAsync(
         string codexHome,
-        ISet<string> sessionIndexIds,
+        SessionIndexInfo sessionIndex,
         ISet<string> anchoredIds,
         IDictionary<string, ThreadSummary> summaries,
         IDictionary<string, string> rolloutPathsById,
@@ -145,15 +147,16 @@ public static partial class ThreadCatalog
 
             var file = new FileInfo(rolloutPath);
             var archived = IsArchivedRollout(codexHome, rolloutPath);
-            var flags = BuildFlags(id, metadata?.Cwd ?? string.Empty, rolloutPath, archived, true, sessionIndexIds, anchoredIds, true);
+            var flags = BuildFlags(id, metadata?.Cwd ?? string.Empty, rolloutPath, archived, true, sessionIndex.Ids, anchoredIds, true);
             if (file.Length >= LargeRolloutThresholdBytes && !flags.Contains(RecoveryFlag.LargeRollout))
             {
                 flags.Add(RecoveryFlag.LargeRollout);
             }
 
+            var title = await ResolveTitleAsync(id, metadata?.Id ?? id, rolloutPath, true, sessionIndex.ThreadNames, cancellationToken);
             summaries[id] = new ThreadSummary(
                 id,
-                metadata?.Id ?? id,
+                title,
                 metadata?.Cwd ?? string.Empty,
                 PathUtilities.NormalizeForComparison(metadata?.Cwd ?? string.Empty),
                 archived,
@@ -236,13 +239,14 @@ public static partial class ThreadCatalog
         }
     }
 
-    private static async Task<HashSet<string>> LoadSessionIndexIdsAsync(string codexHome, CancellationToken cancellationToken)
+    private static async Task<SessionIndexInfo> LoadSessionIndexAsync(string codexHome, CancellationToken cancellationToken)
     {
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var threadNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var indexPath = Path.Combine(codexHome, "session_index.jsonl");
         if (!File.Exists(indexPath))
         {
-            return ids;
+            return new SessionIndexInfo(ids, threadNames);
         }
 
         await using var stream = new FileStream(indexPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 1024 * 16, useAsync: true);
@@ -261,7 +265,16 @@ public static partial class ThreadCatalog
                 using var document = JsonDocument.Parse(line);
                 if (document.RootElement.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String)
                 {
-                    ids.Add(id.GetString()!);
+                    var idValue = id.GetString()!;
+                    ids.Add(idValue);
+                    if (document.RootElement.TryGetProperty("thread_name", out var threadName) && threadName.ValueKind == JsonValueKind.String)
+                    {
+                        var threadNameValue = threadName.GetString();
+                        if (!string.IsNullOrWhiteSpace(threadNameValue))
+                        {
+                            threadNames[idValue] = threadNameValue;
+                        }
+                    }
                 }
             }
             catch (JsonException)
@@ -270,7 +283,73 @@ public static partial class ThreadCatalog
             }
         }
 
-        return ids;
+        return new SessionIndexInfo(ids, threadNames);
+    }
+
+    private static async Task<string> ResolveTitleAsync(
+        string id,
+        string rawTitle,
+        string rolloutPath,
+        bool rolloutExists,
+        IReadOnlyDictionary<string, string> sessionIndexNames,
+        CancellationToken cancellationToken)
+    {
+        if (sessionIndexNames.TryGetValue(id, out var sessionIndexTitle) && IsUsableDisplayTitle(sessionIndexTitle))
+        {
+            return CompactTitle(sessionIndexTitle);
+        }
+
+        if (IsUsableDisplayTitle(rawTitle))
+        {
+            return CompactTitle(rawTitle);
+        }
+
+        if (rolloutExists)
+        {
+            var rolloutTitle = await RolloutParser.ReadThreadNameAsync(rolloutPath, MaxRolloutTitleScanLines, cancellationToken);
+            if (IsUsableDisplayTitle(rolloutTitle))
+            {
+                return CompactTitle(rolloutTitle!);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(sessionIndexTitle))
+        {
+            return CompactTitle(sessionIndexTitle);
+        }
+
+        return CompactTitle(string.IsNullOrWhiteSpace(rawTitle) ? id : rawTitle);
+    }
+
+    private static bool IsUsableDisplayTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var trimmed = title.Trim();
+        if (trimmed.Length > 180 || trimmed.Contains('\n') || trimmed.Contains('\r'))
+        {
+            return false;
+        }
+
+        return !trimmed.StartsWith("Context:", StringComparison.OrdinalIgnoreCase)
+            && !trimmed.StartsWith("Task:", StringComparison.OrdinalIgnoreCase)
+            && !trimmed.StartsWith("<codex_delegation", StringComparison.OrdinalIgnoreCase)
+            && !trimmed.StartsWith("```", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string CompactTitle(string title)
+    {
+        var line = title
+            .Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
+            .Select(part => part.Trim())
+            .FirstOrDefault(part => !string.IsNullOrWhiteSpace(part) && part != "```")
+            ?? title.Trim();
+
+        line = WhitespaceRegex().Replace(line, " ").Trim();
+        return line.Length <= 96 ? line : line[..96].TrimEnd() + "...";
     }
 
     private static IEnumerable<string> EnumerateRollouts(string codexHome)
@@ -323,4 +402,11 @@ public static partial class ThreadCatalog
 
     [GeneratedRegex(@"rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-(?<id>.+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RolloutIdRegex();
+
+    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant)]
+    private static partial Regex WhitespaceRegex();
+
+    private sealed record SessionIndexInfo(
+        HashSet<string> Ids,
+        IReadOnlyDictionary<string, string> ThreadNames);
 }

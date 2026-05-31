@@ -315,6 +315,9 @@ public partial class MainWindow : Window
         SetBrush("SubtleTextBrush", _palette.SubtleText);
         SetBrush("AccentTextBrush", _palette.AccentText);
         SetBrush("InputBackgroundBrush", _palette.InputBackground);
+        SetBrush("DisabledBackgroundBrush", _palette.DisabledBackground);
+        SetBrush("HoverBackgroundBrush", _palette.HoverBackground);
+        SetBrush("ThumbBrush", _palette.Thumb);
         SetBrush("ChatAssistantBrush", _palette.ChatAssistant);
         SetBrush("ChatUserBrush", _palette.ChatUser);
         SetBrush("ChatToolBrush", _palette.ChatTool);
@@ -472,6 +475,9 @@ public sealed record ThemePalette(
     Brush SubtleText,
     Brush AccentText,
     Brush InputBackground,
+    Brush DisabledBackground,
+    Brush HoverBackground,
+    Brush Thumb,
     Brush Selection,
     Brush ChatAssistant,
     Brush ChatUser,
@@ -488,6 +494,9 @@ public sealed record ThemePalette(
         BrushFrom("#8B8780"),
         BrushFrom("#7C5C00"),
         BrushFrom("#FFFFFF"),
+        BrushFrom("#F1EFEA"),
+        BrushFrom("#EEEAE3"),
+        BrushFrom("#C9C4BA"),
         BrushFrom("#E6E3DC"),
         BrushFrom("#FFFFFF"),
         BrushFrom("#F2EFE8"),
@@ -504,6 +513,9 @@ public sealed record ThemePalette(
         BrushFrom("#858B91"),
         BrushFrom("#E1B866"),
         BrushFrom("#202325"),
+        BrushFrom("#171A1C"),
+        BrushFrom("#283136"),
+        BrushFrom("#5F6B73"),
         BrushFrom("#293236"),
         BrushFrom("#181A1B"),
         BrushFrom("#252525"),
