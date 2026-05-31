@@ -23,18 +23,41 @@ public sealed class SidebarTreeBuilderTests
             group =>
             {
                 Assert.Equal("repo-a", group.Title);
-                Assert.Equal(new[] { "anchor", "active-a", "archived" }, group.Threads.Select(t => t.Id));
+                Assert.Equal(new[] { "Active", "Archived" }, group.StatusGroups.Select(status => status.Title));
+                Assert.Equal(new[] { "anchor", "active-a" }, group.StatusGroups[0].Threads.Select(t => t.Id));
+                Assert.Equal(new[] { "archived" }, group.StatusGroups[1].Threads.Select(t => t.Id));
             },
             group =>
             {
                 Assert.Equal("repo-c", group.Title);
-                Assert.Equal(new[] { "active-c" }, group.Threads.Select(t => t.Id));
+                Assert.Equal(new[] { "Active" }, group.StatusGroups.Select(status => status.Title));
+                Assert.Equal(new[] { "active-c" }, group.StatusGroups[0].Threads.Select(t => t.Id));
             },
             group =>
             {
                 Assert.Equal("repo-b", group.Title);
-                Assert.Equal(new[] { "hidden" }, group.Threads.Select(t => t.Id));
+                Assert.Equal(new[] { "Active" }, group.StatusGroups.Select(status => status.Title));
+                Assert.Equal(new[] { "hidden" }, group.StatusGroups[0].Threads.Select(t => t.Id));
             });
+    }
+
+    [Fact]
+    public void Build_combines_threads_with_the_same_project_label_even_when_paths_differ()
+    {
+        var threads = new[]
+        {
+            MakeThread("one", "One", "C:\\worktrees\\aonsoku-basic-auth", true, false, RecoveryFlag.Archived),
+            MakeThread("two", "Two", "D:\\old\\aonsoku-basic-auth", true, false, RecoveryFlag.Archived),
+            MakeThread("three", "Three", "T:\\cloud\\aonsoku-basic-auth", false)
+        };
+
+        var groups = SidebarTreeBuilder.Build(threads);
+
+        var group = Assert.Single(groups);
+        Assert.Equal("aonsoku-basic-auth", group.Title);
+        Assert.Equal(new[] { "Active", "Archived" }, group.StatusGroups.Select(status => status.Title));
+        Assert.Equal(new[] { "three" }, group.StatusGroups[0].Threads.Select(t => t.Id));
+        Assert.Equal(new[] { "one", "two" }, group.StatusGroups[1].Threads.Select(t => t.Id));
     }
 
     private static ThreadSummary MakeThread(string id, string title, string cwd, bool archived, bool anchored = false, params RecoveryFlag[] flags)

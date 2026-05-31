@@ -194,7 +194,11 @@ public partial class MainWindow : Window
         _sidebarGroups.Clear();
         foreach (var group in SidebarTreeBuilder.Build(matching))
         {
-            _sidebarGroups.Add(new SidebarGroupViewModel(group.Title, group.Threads.Select(t => new ThreadRowViewModel(t))));
+            _sidebarGroups.Add(new SidebarGroupViewModel(
+                group.Title,
+                group.StatusGroups.Select(status => new SidebarStatusGroupViewModel(
+                    status.Title,
+                    status.Threads.Select(t => new ThreadRowViewModel(t))))));
         }
     }
 
@@ -318,13 +322,16 @@ public partial class MainWindow : Window
         SetBrush("DisabledBackgroundBrush", _palette.DisabledBackground);
         SetBrush("HoverBackgroundBrush", _palette.HoverBackground);
         SetBrush("ThumbBrush", _palette.Thumb);
+        SetBrush("SelectionBrush", _palette.Selection);
         SetBrush("ChatAssistantBrush", _palette.ChatAssistant);
         SetBrush("ChatUserBrush", _palette.ChatUser);
         SetBrush("ChatToolBrush", _palette.ChatTool);
 
         Resources[SystemColors.HighlightBrushKey] = _palette.Selection;
+        Resources[SystemColors.InactiveSelectionHighlightBrushKey] = _palette.Selection;
         Resources[SystemColors.ControlBrushKey] = _palette.Selection;
         Resources[SystemColors.HighlightTextBrushKey] = _palette.Text;
+        Resources[SystemColors.InactiveSelectionHighlightTextBrushKey] = _palette.Text;
     }
 
     private void SetBrush(string key, Brush brush)
@@ -362,7 +369,16 @@ public partial class MainWindow : Window
     }
 }
 
-public sealed class SidebarGroupViewModel(string title, IEnumerable<ThreadRowViewModel> threads)
+public sealed class SidebarGroupViewModel(string title, IEnumerable<SidebarStatusGroupViewModel> statusGroups)
+{
+    public string Title { get; } = title;
+
+    public ObservableCollection<SidebarStatusGroupViewModel> StatusGroups { get; } = new(statusGroups);
+
+    public string CountText => StatusGroups.Sum(group => group.Threads.Count).ToString();
+}
+
+public sealed class SidebarStatusGroupViewModel(string title, IEnumerable<ThreadRowViewModel> threads)
 {
     public string Title { get; } = title;
 

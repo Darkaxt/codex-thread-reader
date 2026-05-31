@@ -22,6 +22,7 @@
         <SolidColorBrush x:Key="DisabledBackgroundBrush" Color="#F1EFEA" />
         <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#EEEAE3" />
         <SolidColorBrush x:Key="ThumbBrush" Color="#C9C4BA" />
+        <SolidColorBrush x:Key="SelectionBrush" Color="#E6E3DC" />
         <SolidColorBrush x:Key="ChatAssistantBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="ChatUserBrush" Color="#F2EFE8" />
         <SolidColorBrush x:Key="ChatToolBrush" Color="#F6F6F6" />
@@ -187,11 +188,80 @@
 
         <Style TargetType="TreeView">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
         </Style>
 
         <Style TargetType="TreeViewItem">
             <Setter Property="IsExpanded" Value="True" />
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeViewItem">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="14" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ToggleButton x:Name="Expander"
+                                              Grid.Column="0"
+                                              Width="12"
+                                              Height="18"
+                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
+                                              ClickMode="Press"
+                                              Focusable="False"
+                                              Background="Transparent"
+                                              BorderThickness="0">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Path x:Name="Arrow"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  Fill="{DynamicResource SubtleTextBrush}"
+                                                  Data="M 0 0 L 0 8 L 5 4 Z" />
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Arrow" Property="RenderTransform">
+                                                        <Setter.Value>
+                                                            <RotateTransform Angle="90" CenterX="2.5" CenterY="4" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+
+                                <Border x:Name="HeaderBorder"
+                                        Grid.Column="1"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="6"
+                                        Padding="0">
+                                    <ContentPresenter x:Name="PART_Header"
+                                                      ContentSource="Header"
+                                                      HorizontalAlignment="Stretch" />
+                                </Border>
+                            </Grid>
+                            <ItemsPresenter x:Name="ItemsHost" Margin="14,0,0,0" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
+                            </Trigger>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource SelectionBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style TargetType="ScrollBar">
@@ -302,9 +372,16 @@
                               SelectedItemChanged="ThreadsTree_SelectedItemChanged"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <TreeView.Resources>
-                            <HierarchicalDataTemplate DataType="{x:Type local:SidebarGroupViewModel}" ItemsSource="{Binding Threads}">
+                            <HierarchicalDataTemplate DataType="{x:Type local:SidebarGroupViewModel}" ItemsSource="{Binding StatusGroups}">
                                 <DockPanel Margin="0,8,0,4">
                                     <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource MutedTextBrush}" />
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource SubtleTextBrush}" Margin="8,0,0,0" />
+                                </DockPanel>
+                            </HierarchicalDataTemplate>
+
+                            <HierarchicalDataTemplate DataType="{x:Type local:SidebarStatusGroupViewModel}" ItemsSource="{Binding Threads}">
+                                <DockPanel Margin="0,4,0,2">
+                                    <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource SubtleTextBrush}" />
                                     <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource SubtleTextBrush}" Margin="8,0,0,0" />
                                 </DockPanel>
                             </HierarchicalDataTemplate>
