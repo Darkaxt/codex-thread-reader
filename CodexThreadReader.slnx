@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CodexThreadReader.Core/CodexThreadReader.Core.csproj" />
+    <Project Path="src/CodexThreadReader/CodexThreadReader.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CodexThreadReader.Tests/CodexThreadReader.Tests.csproj" />
+  </Folder>
+</Solution>

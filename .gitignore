@@ -1,0 +1,20 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.cache
+
+# Never commit recovered Codex data or local exports.
+Exports/
+CodexThreadReader/Exports/
+*.jsonl
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.codex/
+
+# Publish output can be regenerated.
+publish/
+artifacts/
