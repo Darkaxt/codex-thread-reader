@@ -5,7 +5,7 @@ namespace CodexThreadReader.Tests;
 public sealed class SidebarTreeBuilderTests
 {
     [Fact]
-    public void Build_groups_anchored_smoked_active_projects_and_archived_threads_for_sidebar_display()
+    public void Build_groups_threads_by_project_path_and_sorts_anchored_threads_first_inside_project()
     {
         var threads = new[]
         {
@@ -22,23 +22,18 @@ public sealed class SidebarTreeBuilderTests
             groups,
             group =>
             {
-                Assert.Equal("Anchored", group.Title);
-                Assert.Equal(new[] { "anchor" }, group.Threads.Select(t => t.Id));
+                Assert.Equal("repo-a", group.Title);
+                Assert.Equal(new[] { "anchor", "active-a", "archived" }, group.Threads.Select(t => t.Id));
             },
             group =>
             {
-                Assert.Equal("Recovery", group.Title);
+                Assert.Equal("repo-c", group.Title);
+                Assert.Equal(new[] { "active-c" }, group.Threads.Select(t => t.Id));
+            },
+            group =>
+            {
+                Assert.Equal("repo-b", group.Title);
                 Assert.Equal(new[] { "hidden" }, group.Threads.Select(t => t.Id));
-            },
-            group =>
-            {
-                Assert.Equal("Projects", group.Title);
-                Assert.Equal(new[] { "active-a", "active-c" }, group.Threads.Select(t => t.Id));
-            },
-            group =>
-            {
-                Assert.Equal("Archived", group.Title);
-                Assert.Equal(new[] { "archived" }, group.Threads.Select(t => t.Id));
             });
     }
 

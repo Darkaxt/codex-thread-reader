@@ -21,6 +21,13 @@ public enum TranscriptEntryKind
     Context
 }
 
+public enum ThemeMode
+{
+    System,
+    Light,
+    Dark
+}
+
 public sealed record ThreadCatalogOptions(string CodexHome, string? AnchorStorePath = null);
 
 public sealed record ThreadCatalogResult(IReadOnlyList<ThreadSummary> Threads, IReadOnlyList<string> Errors);

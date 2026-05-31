@@ -6,28 +6,54 @@
         xmlns:local="clr-namespace:CodexThreadReader"
         mc:Ignorable="d"
         Title="Codex Thread Reader" Height="820" Width="1320" MinHeight="660" MinWidth="1060"
-        Background="#FFFFFF"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource TextBrush}"
         Loaded="Window_Loaded">
     <Window.Resources>
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#F7F6F2" />
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#E5E2DC" />
+        <SolidColorBrush x:Key="TextBrush" Color="#202124" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#6F6C66" />
+        <SolidColorBrush x:Key="SubtleTextBrush" Color="#8B8780" />
+        <SolidColorBrush x:Key="AccentTextBrush" Color="#7C5C00" />
+        <SolidColorBrush x:Key="InputBackgroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="ChatAssistantBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="ChatUserBrush" Color="#F2EFE8" />
+        <SolidColorBrush x:Key="ChatToolBrush" Color="#F6F6F6" />
+
         <Style TargetType="Button">
             <Setter Property="MinHeight" Value="30" />
             <Setter Property="Padding" Value="12,5" />
-            <Setter Property="BorderBrush" Value="#D8D6D0" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="Foreground" Value="#202124" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         </Style>
 
         <Style TargetType="TextBox">
             <Setter Property="MinHeight" Value="30" />
             <Setter Property="Padding" Value="8,4" />
-            <Setter Property="BorderBrush" Value="#D8D6D0" />
-            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+            <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
         </Style>
 
         <Style TargetType="ComboBox">
             <Setter Property="MinHeight" Value="30" />
-            <Setter Property="BorderBrush" Value="#D8D6D0" />
-            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        </Style>
+
+        <Style TargetType="TreeView">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        </Style>
+
+        <Style TargetType="TreeViewItem">
+            <Setter Property="IsExpanded" Value="True" />
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         </Style>
     </Window.Resources>
 
@@ -38,9 +64,10 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Background="#F7F6F2" BorderBrush="#E5E2DC" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
             <Grid Margin="12">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -54,8 +81,8 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Text="Codex" FontSize="20" FontWeight="SemiBold" Foreground="#202124" />
-                        <TextBlock Text="Thread Reader" FontSize="12" Foreground="#6F6C66" Margin="0,2,0,0" />
+                        <TextBlock Text="Codex" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" />
+                        <TextBlock Text="Thread Reader" FontSize="12" Foreground="{DynamicResource MutedTextBrush}" Margin="0,2,0,0" />
                     </StackPanel>
                     <Button Grid.Column="1" x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" />
                 </Grid>
@@ -65,7 +92,7 @@
                          TextChanged="SearchTextBox_TextChanged"
                          ToolTip="Search by title, thread ID, path, or recovery flag." />
 
-                <Grid Grid.Row="2" Margin="0,0,0,10">
+                <Grid Grid.Row="2" Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -80,42 +107,62 @@
                     <Button Grid.Column="1" x:Name="OpenExportsButton" Content="Exports" Margin="8,0,0,0" Click="OpenExportsButton_Click" />
                 </Grid>
 
-                <TreeView Grid.Row="3" x:Name="ThreadsTree"
-                          ItemsSource="{Binding}"
-                          Background="Transparent"
-                          BorderThickness="0"
-                          SelectedItemChanged="ThreadsTree_SelectedItemChanged"
-                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <TreeView.Resources>
-                        <HierarchicalDataTemplate DataType="{x:Type local:SidebarGroupViewModel}" ItemsSource="{Binding Threads}">
-                            <DockPanel Margin="0,10,0,4">
-                                <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" Foreground="#6F6C66" />
-                                <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" FontSize="11" Foreground="#8B8780" Margin="8,0,0,0" />
-                            </DockPanel>
-                        </HierarchicalDataTemplate>
+                <Grid Grid.Row="3" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Theme" VerticalAlignment="Center" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" Margin="0,0,8,0" />
+                    <ComboBox Grid.Column="1" x:Name="ThemeComboBox" SelectionChanged="ThemeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="System" Tag="System" />
+                        <ComboBoxItem Content="Light" Tag="Light" />
+                        <ComboBoxItem Content="Dark" Tag="Dark" />
+                    </ComboBox>
+                </Grid>
 
-                        <DataTemplate DataType="{x:Type local:ThreadRowViewModel}">
-                            <Border Padding="9,7" Margin="0,1,0,1" CornerRadius="6" Background="Transparent">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding AnchorMark}" Width="14" Foreground="#7C5C00" FontWeight="SemiBold" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" Foreground="#202124" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SidebarMeta}" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="#77746E" Margin="0,3,0,0" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </TreeView.Resources>
-                </TreeView>
+                <Grid Grid.Row="4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Projects" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,6" />
+                    <TreeView Grid.Row="1" x:Name="ThreadsTree"
+                              ItemsSource="{Binding}"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              SelectedItemChanged="ThreadsTree_SelectedItemChanged"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <TreeView.Resources>
+                            <HierarchicalDataTemplate DataType="{x:Type local:SidebarGroupViewModel}" ItemsSource="{Binding Threads}">
+                                <DockPanel Margin="0,8,0,4">
+                                    <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource MutedTextBrush}" />
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource SubtleTextBrush}" Margin="8,0,0,0" />
+                                </DockPanel>
+                            </HierarchicalDataTemplate>
 
-                <StackPanel Grid.Row="4" Margin="0,12,0,0">
-                    <TextBlock Text="Anchor hidden thread" FontSize="11" FontWeight="SemiBold" Foreground="#6F6C66" Margin="0,0,0,5" />
+                            <DataTemplate DataType="{x:Type local:ThreadRowViewModel}">
+                                <Border Padding="9,7" Margin="0,1,0,1" CornerRadius="6" Background="Transparent">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding AnchorMark}" Width="14" Foreground="{DynamicResource AccentTextBrush}" FontWeight="SemiBold" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextBrush}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SidebarMeta}" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="{DynamicResource SubtleTextBrush}" Margin="0,3,0,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </TreeView.Resources>
+                    </TreeView>
+                </Grid>
+
+                <StackPanel Grid.Row="5" Margin="0,12,0,0">
+                    <TextBlock Text="Anchor hidden thread" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource MutedTextBrush}" Margin="0,0,0,5" />
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -125,30 +172,30 @@
                                  ToolTip="Paste a Codex thread ID to anchor it at the top." />
                         <Button Grid.Column="1" x:Name="AnchorButton" Content="Anchor" Margin="8,0,0,0" Click="AnchorButton_Click" />
                     </Grid>
-                    <TextBlock x:Name="StatusTextBlock" Foreground="#6F6C66" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap" />
+                    <TextBlock x:Name="StatusTextBlock" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Border Grid.Column="1" Background="#E5E2DC" />
+        <Border Grid.Column="1" Background="{DynamicResource BorderBrush}" />
 
-        <Grid Grid.Column="2" Background="#FFFFFF">
+        <Grid Grid.Column="2" Background="{DynamicResource WindowBackgroundBrush}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" BorderBrush="#ECE9E3" BorderThickness="0,0,0,1" Padding="24,16">
+            <Border Grid.Row="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,16" Background="{DynamicResource PanelBackgroundBrush}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock x:Name="DetailTitleTextBlock" FontSize="18" FontWeight="SemiBold" Foreground="#202124" TextWrapping="Wrap" />
-                        <TextBlock x:Name="DetailMetaTextBlock" FontSize="12" Foreground="#6F6C66" Margin="0,5,0,0" TextWrapping="Wrap" />
-                        <TextBlock x:Name="DetailFlagsTextBlock" FontSize="12" Foreground="#7C5C00" Margin="0,5,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DetailTitleTextBlock" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DetailMetaTextBlock" FontSize="12" Foreground="{DynamicResource MutedTextBrush}" Margin="0,5,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DetailFlagsTextBlock" FontSize="12" Foreground="{DynamicResource AccentTextBrush}" Margin="0,5,0,0" TextWrapping="Wrap" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="18,0,0,0">
                         <Button x:Name="ExportButton" Content="Export" Click="ExportButton_Click" IsEnabled="False" />
@@ -157,7 +204,7 @@
                 </Grid>
             </Border>
 
-            <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="28,22" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="28,22" VerticalScrollBarVisibility="Auto" Background="{DynamicResource WindowBackgroundBrush}">
                 <ItemsControl x:Name="ChatItemsControl">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -171,7 +218,7 @@
                                         Padding="14,12">
                                     <StackPanel>
                                         <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="{Binding HeaderBrush}" FontSize="12" Margin="0,0,0,8" />
-                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontFamily="{Binding FontFamily}" FontSize="13" Foreground="#202124" />
+                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontFamily="{Binding FontFamily}" FontSize="13" Foreground="{Binding TextBrush}" />
                                     </StackPanel>
                                 </Border>
                             </Grid>
@@ -180,8 +227,8 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <Border Grid.Row="2" BorderBrush="#ECE9E3" BorderThickness="0,1,0,0" Padding="24,12" Background="#FFFFFF">
-                <TextBlock x:Name="PreviewStatusTextBlock" Foreground="#6F6C66" FontSize="12" TextWrapping="Wrap" />
+            <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="24,12" Background="{DynamicResource PanelBackgroundBrush}">
+                <TextBlock x:Name="PreviewStatusTextBlock" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" TextWrapping="Wrap" />
             </Border>
         </Grid>
     </Grid>

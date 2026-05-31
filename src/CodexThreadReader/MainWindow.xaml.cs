@@ -1,8 +1,10 @@
 using CodexThreadReader.Core;
+using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace CodexThreadReader;
@@ -13,17 +15,23 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<SidebarGroupViewModel> _sidebarGroups = [];
     private readonly string _settingsRoot;
     private readonly string _anchorPath;
+    private readonly string _settingsPath;
     private readonly string _exportRoot;
     private AnchorStore _anchorStore;
+    private ThemeSettingsStore _themeSettings;
+    private ThemePalette _palette = ThemePalette.Light;
     private CancellationTokenSource? _previewCancellation;
     private ThreadRowViewModel? _selectedThread;
+    private bool _initializingTheme;
 
     public MainWindow()
     {
         _settingsRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CodexThreadReader");
         _anchorPath = Path.Combine(_settingsRoot, "anchors.json");
+        _settingsPath = Path.Combine(_settingsRoot, "settings.json");
         _exportRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "CodexThreadReader", "Exports");
         _anchorStore = new AnchorStore(_anchorPath, Array.Empty<string>());
+        _themeSettings = new ThemeSettingsStore(_settingsPath, ThemeMode.System);
         InitializeComponent();
         ThreadsTree.DataContext = _sidebarGroups;
     }
@@ -33,6 +41,9 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(_settingsRoot);
         Directory.CreateDirectory(_exportRoot);
         _anchorStore = await AnchorStore.LoadAsync(_anchorPath, CancellationToken.None);
+        _themeSettings = await ThemeSettingsStore.LoadAsync(_settingsPath, CancellationToken.None);
+        SelectThemeComboBoxItem(_themeSettings.Mode);
+        ApplyTheme(_themeSettings.Mode);
         await RefreshCatalogAsync();
     }
 
@@ -41,14 +52,31 @@ public partial class MainWindow : Window
         await RefreshCatalogAsync();
     }
 
-    private void SearchTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         ApplyFilters();
     }
 
-    private void FilterComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void FilterComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         ApplyFilters();
+    }
+
+    private async void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_initializingTheme || ThemeComboBox.SelectedItem is not ComboBoxItem item)
+        {
+            return;
+        }
+
+        var mode = ParseThemeMode(item.Tag?.ToString());
+        _themeSettings = _themeSettings.WithMode(mode);
+        await _themeSettings.SaveAsync(CancellationToken.None);
+        ApplyTheme(mode);
+        if (_selectedThread is not null)
+        {
+            await LoadPreviewAsync(_selectedThread);
+        }
     }
 
     private async void AnchorButton_Click(object sender, RoutedEventArgs e)
@@ -157,7 +185,7 @@ public partial class MainWindow : Window
     private void ApplyFilters()
     {
         var search = SearchTextBox?.Text?.Trim() ?? string.Empty;
-        var filter = (FilterComboBox?.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "All";
+        var filter = (FilterComboBox?.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "All";
         var matching = _allThreads
             .Where(t => MatchesFilter(t, filter) && MatchesSearch(t, search))
             .Select(t => t.Summary)
@@ -229,7 +257,7 @@ public partial class MainWindow : Window
         try
         {
             var parsed = await RolloutParser.ParseAsync(selected.Summary.RolloutPath, maxMessages: 300, cancellation.Token);
-            ChatItemsControl.ItemsSource = parsed.Messages.Select(ChatMessageViewModel.FromTranscriptEntry).ToArray();
+            ChatItemsControl.ItemsSource = parsed.Messages.Select(entry => ChatMessageViewModel.FromTranscriptEntry(entry, _palette)).ToArray();
             PreviewStatusTextBlock.Text = $"Preview entries: {parsed.Messages.Count}. Parsed lines: {parsed.Report.ParsedLines}. Invalid lines: {parsed.Report.InvalidLines}. Export parses the full rollout.";
             ChatScrollViewer.ScrollToTop();
         }
@@ -257,6 +285,67 @@ public partial class MainWindow : Window
     private void SetStatus(string status)
     {
         StatusTextBlock.Text = status;
+    }
+
+    private void SelectThemeComboBoxItem(ThemeMode mode)
+    {
+        _initializingTheme = true;
+        foreach (var item in ThemeComboBox.Items.OfType<ComboBoxItem>())
+        {
+            if (ParseThemeMode(item.Tag?.ToString()) == mode)
+            {
+                ThemeComboBox.SelectedItem = item;
+                break;
+            }
+        }
+
+        _initializingTheme = false;
+    }
+
+    private void ApplyTheme(ThemeMode mode)
+    {
+        var effectiveMode = mode == ThemeMode.System ? GetSystemThemeMode() : mode;
+        _palette = effectiveMode == ThemeMode.Dark ? ThemePalette.Dark : ThemePalette.Light;
+        SetBrush("WindowBackgroundBrush", _palette.WindowBackground);
+        SetBrush("SidebarBackgroundBrush", _palette.SidebarBackground);
+        SetBrush("PanelBackgroundBrush", _palette.PanelBackground);
+        SetBrush("BorderBrush", _palette.Border);
+        SetBrush("TextBrush", _palette.Text);
+        SetBrush("MutedTextBrush", _palette.MutedText);
+        SetBrush("SubtleTextBrush", _palette.SubtleText);
+        SetBrush("AccentTextBrush", _palette.AccentText);
+        SetBrush("InputBackgroundBrush", _palette.InputBackground);
+        SetBrush("ChatAssistantBrush", _palette.ChatAssistant);
+        SetBrush("ChatUserBrush", _palette.ChatUser);
+        SetBrush("ChatToolBrush", _palette.ChatTool);
+
+        Resources[SystemColors.HighlightBrushKey] = _palette.Selection;
+        Resources[SystemColors.ControlBrushKey] = _palette.Selection;
+        Resources[SystemColors.HighlightTextBrushKey] = _palette.Text;
+    }
+
+    private void SetBrush(string key, Brush brush)
+    {
+        Resources[key] = brush;
+    }
+
+    private static ThemeMode ParseThemeMode(string? value)
+    {
+        return Enum.TryParse<ThemeMode>(value, ignoreCase: true, out var mode) ? mode : ThemeMode.System;
+    }
+
+    private static ThemeMode GetSystemThemeMode()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+            var appsUseLightTheme = key?.GetValue("AppsUseLightTheme");
+            return appsUseLightTheme is int value && value == 0 ? ThemeMode.Dark : ThemeMode.Light;
+        }
+        catch
+        {
+            return ThemeMode.Light;
+        }
     }
 
     private static void OpenInExplorer(string path)
@@ -297,21 +386,25 @@ public sealed class ThreadRowViewModel(ThreadSummary summary)
 
     public string FlagsText => Summary.Flags.Count == 0 ? "" : string.Join(", ", Summary.Flags);
 
-    public string SidebarMeta => $"{ProjectLabel}  {UpdatedText}";
+    public string SidebarMeta => $"{StatusLabel}  {UpdatedText}";
 
     public bool IsSmoked => Summary.Flags.Any(flag => flag is RecoveryFlag.MissingFromSessionIndex or RecoveryFlag.ExtendedPath or RecoveryFlag.RolloutOnly or RecoveryFlag.DbOnlyMissingFile);
 
-    private string ProjectLabel
+    private string StatusLabel
     {
         get
         {
-            if (string.IsNullOrWhiteSpace(Summary.NormalizedCwd))
+            if (Summary.IsAnchored)
             {
-                return "No project";
+                return "Pinned";
             }
 
-            var label = Path.GetFileName(Summary.NormalizedCwd);
-            return string.IsNullOrWhiteSpace(label) ? Summary.NormalizedCwd : label;
+            if (Summary.IsArchived)
+            {
+                return "Archived";
+            }
+
+            return IsSmoked ? "Recovery" : "Active";
         }
     }
 
@@ -344,9 +437,11 @@ public sealed class ChatMessageViewModel
 
     public required Brush HeaderBrush { get; init; }
 
+    public required Brush TextBrush { get; init; }
+
     public required FontFamily FontFamily { get; init; }
 
-    public static ChatMessageViewModel FromTranscriptEntry(TranscriptEntry entry)
+    public static ChatMessageViewModel FromTranscriptEntry(TranscriptEntry entry, ThemePalette palette)
     {
         var phase = string.IsNullOrWhiteSpace(entry.Phase) ? string.Empty : $" / {entry.Phase}";
         var isUser = entry.Role.Equals("user", StringComparison.OrdinalIgnoreCase);
@@ -358,15 +453,67 @@ public sealed class ChatMessageViewModel
             Header = header,
             Text = entry.Text,
             BubbleAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left,
-            BubbleBackground = isUser ? BrushFrom("#F2EFE8") : isTool ? BrushFrom("#F6F6F6") : Brushes.White,
-            BorderBrush = isTool ? BrushFrom("#D8D6D0") : BrushFrom("#ECE9E3"),
-            HeaderBrush = isTool ? BrushFrom("#6F6C66") : BrushFrom("#4A4843"),
+            BubbleBackground = isUser ? palette.ChatUser : isTool ? palette.ChatTool : palette.ChatAssistant,
+            BorderBrush = isTool ? palette.Border : palette.ChatBorder,
+            HeaderBrush = isTool ? palette.MutedText : palette.SubtleText,
+            TextBrush = palette.Text,
             FontFamily = isTool ? new FontFamily("Consolas") : new FontFamily("Segoe UI")
         };
     }
+}
+
+public sealed record ThemePalette(
+    Brush WindowBackground,
+    Brush SidebarBackground,
+    Brush PanelBackground,
+    Brush Border,
+    Brush Text,
+    Brush MutedText,
+    Brush SubtleText,
+    Brush AccentText,
+    Brush InputBackground,
+    Brush Selection,
+    Brush ChatAssistant,
+    Brush ChatUser,
+    Brush ChatTool,
+    Brush ChatBorder)
+{
+    public static ThemePalette Light { get; } = new(
+        BrushFrom("#FFFFFF"),
+        BrushFrom("#F7F6F2"),
+        BrushFrom("#FFFFFF"),
+        BrushFrom("#E5E2DC"),
+        BrushFrom("#202124"),
+        BrushFrom("#6F6C66"),
+        BrushFrom("#8B8780"),
+        BrushFrom("#7C5C00"),
+        BrushFrom("#FFFFFF"),
+        BrushFrom("#E6E3DC"),
+        BrushFrom("#FFFFFF"),
+        BrushFrom("#F2EFE8"),
+        BrushFrom("#F6F6F6"),
+        BrushFrom("#ECE9E3"));
+
+    public static ThemePalette Dark { get; } = new(
+        BrushFrom("#101213"),
+        BrushFrom("#162126"),
+        BrushFrom("#151515"),
+        BrushFrom("#2A2D2F"),
+        BrushFrom("#ECEDEE"),
+        BrushFrom("#A8ADB2"),
+        BrushFrom("#858B91"),
+        BrushFrom("#E1B866"),
+        BrushFrom("#202325"),
+        BrushFrom("#293236"),
+        BrushFrom("#181A1B"),
+        BrushFrom("#252525"),
+        BrushFrom("#1F2326"),
+        BrushFrom("#2F3336"));
 
     private static Brush BrushFrom(string color)
     {
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+        brush.Freeze();
+        return brush;
     }
 }
