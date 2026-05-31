@@ -21,6 +21,7 @@ It does not write to `.codex`, repair Codex state, or call Codex APIs.
 - Lets you persistently anchor a thread ID at the top of the list even when Codex Desktop cannot show it.
 - Resolves sidebar titles from Codex's session index or rollout title events before falling back to compacted SQLite text.
 - Supports System, Light, and Dark theme modes.
+- Renders conversation messages as Markdown in the chat preview while keeping tool output as plain monospace text.
 - Streams rollout JSONL so very large thread files are not loaded as raw text.
 - Exports selected threads as:
   - `thread.html`

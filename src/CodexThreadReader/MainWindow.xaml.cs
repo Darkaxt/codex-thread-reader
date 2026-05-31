@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 
 namespace CodexThreadReader;
@@ -446,7 +447,7 @@ public sealed class ChatMessageViewModel
 {
     public required string Header { get; init; }
 
-    public required string Text { get; init; }
+    public required FlowDocument Document { get; init; }
 
     public required HorizontalAlignment BubbleAlignment { get; init; }
 
@@ -456,27 +457,22 @@ public sealed class ChatMessageViewModel
 
     public required Brush HeaderBrush { get; init; }
 
-    public required Brush TextBrush { get; init; }
-
-    public required FontFamily FontFamily { get; init; }
-
     public static ChatMessageViewModel FromTranscriptEntry(TranscriptEntry entry, ThemePalette palette)
     {
         var phase = string.IsNullOrWhiteSpace(entry.Phase) ? string.Empty : $" / {entry.Phase}";
         var isUser = entry.Role.Equals("user", StringComparison.OrdinalIgnoreCase);
         var isTool = entry.Kind is TranscriptEntryKind.ToolCall or TranscriptEntryKind.ToolOutput;
         var header = $"{entry.Role}{phase} / {entry.Kind} / line {entry.RawLineNumber}";
+        var enableMarkdown = !isTool;
 
         return new ChatMessageViewModel
         {
             Header = header,
-            Text = entry.Text,
+            Document = MarkdownFlowDocumentRenderer.Render(entry.Text, palette, enableMarkdown),
             BubbleAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left,
             BubbleBackground = isUser ? palette.ChatUser : isTool ? palette.ChatTool : palette.ChatAssistant,
             BorderBrush = isTool ? palette.Border : palette.ChatBorder,
-            HeaderBrush = isTool ? palette.MutedText : palette.SubtleText,
-            TextBrush = palette.Text,
-            FontFamily = isTool ? new FontFamily("Consolas") : new FontFamily("Segoe UI")
+            HeaderBrush = isTool ? palette.MutedText : palette.SubtleText
         };
     }
 }
