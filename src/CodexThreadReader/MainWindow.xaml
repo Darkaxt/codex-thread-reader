@@ -3,117 +3,186 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:CodexThreadReader"
         mc:Ignorable="d"
-        Title="Codex Thread Reader" Height="780" Width="1280" MinHeight="620" MinWidth="980"
+        Title="Codex Thread Reader" Height="820" Width="1320" MinHeight="660" MinWidth="1060"
+        Background="#FFFFFF"
         Loaded="Window_Loaded">
-    <Grid Margin="12">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="BorderBrush" Value="#D8D6D0" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="Foreground" Value="#202124" />
+        </Style>
 
-        <Grid Grid.Row="0" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Codex home" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox Grid.Column="1" x:Name="CodexHomeTextBox" MinWidth="360" VerticalContentAlignment="Center" />
-            <Button Grid.Column="2" x:Name="RefreshButton" Content="Refresh" Margin="8,0,0,0" Padding="14,6" Click="RefreshButton_Click" />
-            <Button Grid.Column="3" x:Name="OpenExportsButton" Content="Open exports" Margin="8,0,0,0" Padding="14,6" Click="OpenExportsButton_Click" />
-        </Grid>
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="BorderBrush" Value="#D8D6D0" />
+            <Setter Property="Background" Value="#FFFFFF" />
+        </Style>
 
-        <Grid Grid.Row="1" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox Grid.Column="1" x:Name="SearchTextBox" MinWidth="260" VerticalContentAlignment="Center" TextChanged="SearchTextBox_TextChanged" />
-            <TextBlock Grid.Column="2" Text="Filter" VerticalAlignment="Center" Margin="12,0,8,0" />
-            <ComboBox Grid.Column="3" x:Name="FilterComboBox" Width="140" SelectionChanged="FilterComboBox_SelectionChanged">
-                <ComboBoxItem Content="All" IsSelected="True" />
-                <ComboBoxItem Content="Anchored" />
-                <ComboBoxItem Content="Smoked" />
-                <ComboBoxItem Content="Active" />
-                <ComboBoxItem Content="Archived" />
-            </ComboBox>
-            <TextBox Grid.Column="4" x:Name="AnchorIdTextBox" MinWidth="260" Margin="12,0,0,0" VerticalContentAlignment="Center"
-                     ToolTip="Paste a Codex thread ID to anchor it at the top." />
-            <Button Grid.Column="5" x:Name="AnchorButton" Content="Anchor ID" Margin="8,0,0,0" Padding="14,6" Click="AnchorButton_Click" />
-        </Grid>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="BorderBrush" Value="#D8D6D0" />
+            <Setter Property="Background" Value="#FFFFFF" />
+        </Style>
+    </Window.Resources>
 
-        <Grid Grid.Row="2">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="0.48*" />
-                <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="0.52*" />
-            </Grid.ColumnDefinitions>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="326" />
+            <ColumnDefinition Width="1" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-            <DataGrid Grid.Column="0" x:Name="ThreadsGrid"
-                      ItemsSource="{Binding}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      SelectionMode="Single"
-                      EnableRowVirtualization="True"
-                      EnableColumnVirtualization="True"
-                      SelectionChanged="ThreadsGrid_SelectionChanged">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Pin" Binding="{Binding AnchorMark}" Width="42" />
-                    <DataGridTextColumn Header="Updated" Binding="{Binding UpdatedText}" Width="118" />
-                    <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="2*" />
-                    <DataGridTextColumn Header="Project" Binding="{Binding Cwd}" Width="1.5*" />
-                    <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" Width="86" />
-                    <DataGridTextColumn Header="Flags" Binding="{Binding FlagsText}" Width="1.2*" />
-                </DataGrid.Columns>
-            </DataGrid>
-
-            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#D7DDE5" />
-
-            <Grid Grid.Column="2">
+        <Border Grid.Column="0" Background="#F7F6F2" BorderBrush="#E5E2DC" BorderThickness="0,0,1,0">
+            <Grid Margin="12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" BorderBrush="#D7DDE5" BorderThickness="1" Padding="12" CornerRadius="6" Margin="0,0,0,8">
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock x:Name="DetailTitleTextBlock" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
-                        <TextBlock x:Name="DetailMetaTextBlock" Foreground="#52606D" Margin="0,6,0,0" TextWrapping="Wrap" />
-                        <TextBlock x:Name="DetailFlagsTextBlock" Foreground="#334E68" Margin="0,6,0,0" TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                            <Button x:Name="ExportButton" Content="Export selected" Padding="14,6" Click="ExportButton_Click" IsEnabled="False" />
-                            <Button x:Name="RemoveAnchorButton" Content="Remove anchor" Margin="8,0,0,0" Padding="14,6" Click="RemoveAnchorButton_Click" IsEnabled="False" />
-                        </StackPanel>
+                        <TextBlock Text="Codex" FontSize="20" FontWeight="SemiBold" Foreground="#202124" />
+                        <TextBlock Text="Thread Reader" FontSize="12" Foreground="#6F6C66" Margin="0,2,0,0" />
                     </StackPanel>
-                </Border>
+                    <Button Grid.Column="1" x:Name="RefreshButton" Content="Refresh" Click="RefreshButton_Click" />
+                </Grid>
 
-                <TextBlock Grid.Row="1" x:Name="PreviewStatusTextBlock" Foreground="#52606D" Margin="0,0,0,6" />
-                <ListBox Grid.Row="2" x:Name="PreviewListBox" VirtualizingStackPanel.IsVirtualizing="True"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Border BorderBrush="#D7DDE5" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="#102A43" />
-                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" Margin="0,6,0,0" />
-                                </StackPanel>
+                <TextBox Grid.Row="1" x:Name="SearchTextBox" Margin="0,0,0,8"
+                         VerticalContentAlignment="Center"
+                         TextChanged="SearchTextBox_TextChanged"
+                         ToolTip="Search by title, thread ID, path, or recovery flag." />
+
+                <Grid Grid.Row="2" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox Grid.Column="0" x:Name="FilterComboBox" SelectionChanged="FilterComboBox_SelectionChanged">
+                        <ComboBoxItem Content="All" IsSelected="True" />
+                        <ComboBoxItem Content="Anchored" />
+                        <ComboBoxItem Content="Smoked" />
+                        <ComboBoxItem Content="Active" />
+                        <ComboBoxItem Content="Archived" />
+                    </ComboBox>
+                    <Button Grid.Column="1" x:Name="OpenExportsButton" Content="Exports" Margin="8,0,0,0" Click="OpenExportsButton_Click" />
+                </Grid>
+
+                <TreeView Grid.Row="3" x:Name="ThreadsTree"
+                          ItemsSource="{Binding}"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          SelectedItemChanged="ThreadsTree_SelectedItemChanged"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <TreeView.Resources>
+                        <HierarchicalDataTemplate DataType="{x:Type local:SidebarGroupViewModel}" ItemsSource="{Binding Threads}">
+                            <DockPanel Margin="0,10,0,4">
+                                <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" Foreground="#6F6C66" />
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" FontSize="11" Foreground="#8B8780" Margin="8,0,0,0" />
+                            </DockPanel>
+                        </HierarchicalDataTemplate>
+
+                        <DataTemplate DataType="{x:Type local:ThreadRowViewModel}">
+                            <Border Padding="9,7" Margin="0,1,0,1" CornerRadius="6" Background="Transparent">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding AnchorMark}" Width="14" Foreground="#7C5C00" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis" Foreground="#202124" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SidebarMeta}" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="#77746E" Margin="0,3,0,0" />
+                                </Grid>
                             </Border>
                         </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </Grid>
-        </Grid>
+                    </TreeView.Resources>
+                </TreeView>
 
-        <TextBlock Grid.Row="3" x:Name="StatusTextBlock" Foreground="#52606D" Margin="0,8,0,0" TextWrapping="Wrap" />
+                <StackPanel Grid.Row="4" Margin="0,12,0,0">
+                    <TextBlock Text="Anchor hidden thread" FontSize="11" FontWeight="SemiBold" Foreground="#6F6C66" Margin="0,0,0,5" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" x:Name="AnchorIdTextBox" VerticalContentAlignment="Center"
+                                 ToolTip="Paste a Codex thread ID to anchor it at the top." />
+                        <Button Grid.Column="1" x:Name="AnchorButton" Content="Anchor" Margin="8,0,0,0" Click="AnchorButton_Click" />
+                    </Grid>
+                    <TextBlock x:Name="StatusTextBlock" Foreground="#6F6C66" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Column="1" Background="#E5E2DC" />
+
+        <Grid Grid.Column="2" Background="#FFFFFF">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" BorderBrush="#ECE9E3" BorderThickness="0,0,0,1" Padding="24,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="DetailTitleTextBlock" FontSize="18" FontWeight="SemiBold" Foreground="#202124" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DetailMetaTextBlock" FontSize="12" Foreground="#6F6C66" Margin="0,5,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DetailFlagsTextBlock" FontSize="12" Foreground="#7C5C00" Margin="0,5,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="18,0,0,0">
+                        <Button x:Name="ExportButton" Content="Export" Click="ExportButton_Click" IsEnabled="False" />
+                        <Button x:Name="RemoveAnchorButton" Content="Unanchor" Margin="8,0,0,0" Click="RemoveAnchorButton_Click" IsEnabled="False" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" x:Name="ChatScrollViewer" Padding="28,22" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="ChatItemsControl">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,18">
+                                <Border MaxWidth="780"
+                                        HorizontalAlignment="{Binding BubbleAlignment}"
+                                        Background="{Binding BubbleBackground}"
+                                        BorderBrush="{Binding BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="14,12">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Foreground="{Binding HeaderBrush}" FontSize="12" Margin="0,0,0,8" />
+                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontFamily="{Binding FontFamily}" FontSize="13" Foreground="#202124" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Border Grid.Row="2" BorderBrush="#ECE9E3" BorderThickness="0,1,0,0" Padding="24,12" Background="#FFFFFF">
+                <TextBlock x:Name="PreviewStatusTextBlock" Foreground="#6F6C66" FontSize="12" TextWrapping="Wrap" />
+            </Border>
+        </Grid>
     </Grid>
 </Window>

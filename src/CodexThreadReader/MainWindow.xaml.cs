@@ -3,18 +3,20 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 
 namespace CodexThreadReader;
 
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<ThreadRowViewModel> _allThreads = [];
-    private readonly ObservableCollection<ThreadRowViewModel> _visibleThreads = [];
+    private readonly ObservableCollection<SidebarGroupViewModel> _sidebarGroups = [];
     private readonly string _settingsRoot;
     private readonly string _anchorPath;
     private readonly string _exportRoot;
     private AnchorStore _anchorStore;
     private CancellationTokenSource? _previewCancellation;
+    private ThreadRowViewModel? _selectedThread;
 
     public MainWindow()
     {
@@ -23,12 +25,11 @@ public partial class MainWindow : Window
         _exportRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "CodexThreadReader", "Exports");
         _anchorStore = new AnchorStore(_anchorPath, Array.Empty<string>());
         InitializeComponent();
-        ThreadsGrid.DataContext = _visibleThreads;
+        ThreadsTree.DataContext = _sidebarGroups;
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        CodexHomeTextBox.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
         Directory.CreateDirectory(_settingsRoot);
         Directory.CreateDirectory(_exportRoot);
         _anchorStore = await AnchorStore.LoadAsync(_anchorPath, CancellationToken.None);
@@ -67,29 +68,33 @@ public partial class MainWindow : Window
 
     private async void RemoveAnchorButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ThreadsGrid.SelectedItem is not ThreadRowViewModel selected)
+        if (_selectedThread is null)
         {
             return;
         }
 
-        _anchorStore = _anchorStore.WithThreadIds(_anchorStore.ThreadIds.Where(id => !id.Equals(selected.Id, StringComparison.OrdinalIgnoreCase)));
+        _anchorStore = _anchorStore.WithThreadIds(_anchorStore.ThreadIds.Where(id => !id.Equals(_selectedThread.Id, StringComparison.OrdinalIgnoreCase)));
         await _anchorStore.SaveAsync(CancellationToken.None);
         await RefreshCatalogAsync();
     }
 
-    private async void ThreadsGrid_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private async void ThreadsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        await LoadPreviewAsync(ThreadsGrid.SelectedItem as ThreadRowViewModel);
+        if (e.NewValue is ThreadRowViewModel thread)
+        {
+            _selectedThread = thread;
+            await LoadPreviewAsync(thread);
+        }
     }
 
     private async void ExportButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ThreadsGrid.SelectedItem is not ThreadRowViewModel selected)
+        if (_selectedThread is null)
         {
             return;
         }
 
-        if (!selected.Summary.RolloutExists)
+        if (!_selectedThread.Summary.RolloutExists)
         {
             SetStatus("Selected thread has no rollout file to export.");
             return;
@@ -98,12 +103,12 @@ public partial class MainWindow : Window
         try
         {
             SetBusy(true, "Parsing full rollout for export...");
-            var parsed = await RolloutParser.ParseAsync(selected.Summary.RolloutPath, CancellationToken.None);
+            var parsed = await RolloutParser.ParseAsync(_selectedThread.Summary.RolloutPath, CancellationToken.None);
             SetStatus("Writing export files...");
-            var manifest = await ThreadExporter.ExportAsync(selected.Summary, parsed, _exportRoot, CancellationToken.None);
+            var manifest = await ThreadExporter.ExportAsync(_selectedThread.Summary, parsed, _exportRoot, CancellationToken.None);
             Clipboard.SetText(File.ReadAllText(manifest.HandoffMarkdownPath));
             OpenInExplorer(manifest.ExportDirectory);
-            SetStatus($"Exported {selected.Id}. Handoff prompt copied to clipboard: {manifest.ExportDirectory}");
+            SetStatus($"Exported {_selectedThread.Id}. Handoff prompt copied to clipboard.");
         }
         catch (Exception ex)
         {
@@ -127,7 +132,8 @@ public partial class MainWindow : Window
         {
             SetBusy(true, "Reading Codex thread catalog...");
             _anchorStore = await AnchorStore.LoadAsync(_anchorPath, CancellationToken.None);
-            var result = await ThreadCatalog.LoadAsync(new ThreadCatalogOptions(CodexHomeTextBox.Text.Trim(), _anchorPath), CancellationToken.None);
+            var codexHome = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
+            var result = await ThreadCatalog.LoadAsync(new ThreadCatalogOptions(codexHome, _anchorPath), CancellationToken.None);
             _allThreads.Clear();
             foreach (var thread in result.Threads)
             {
@@ -152,10 +158,15 @@ public partial class MainWindow : Window
     {
         var search = SearchTextBox?.Text?.Trim() ?? string.Empty;
         var filter = (FilterComboBox?.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content?.ToString() ?? "All";
-        _visibleThreads.Clear();
-        foreach (var thread in _allThreads.Where(t => MatchesFilter(t, filter) && MatchesSearch(t, search)))
+        var matching = _allThreads
+            .Where(t => MatchesFilter(t, filter) && MatchesSearch(t, search))
+            .Select(t => t.Summary)
+            .ToArray();
+
+        _sidebarGroups.Clear();
+        foreach (var group in SidebarTreeBuilder.Build(matching))
         {
-            _visibleThreads.Add(thread);
+            _sidebarGroups.Add(new SidebarGroupViewModel(group.Title, group.Threads.Select(t => new ThreadRowViewModel(t))));
         }
     }
 
@@ -187,7 +198,7 @@ public partial class MainWindow : Window
     private async Task LoadPreviewAsync(ThreadRowViewModel? selected)
     {
         _previewCancellation?.Cancel();
-        PreviewListBox.ItemsSource = null;
+        ChatItemsControl.ItemsSource = null;
         DetailTitleTextBlock.Text = string.Empty;
         DetailMetaTextBlock.Text = string.Empty;
         DetailFlagsTextBlock.Text = string.Empty;
@@ -201,8 +212,8 @@ public partial class MainWindow : Window
         }
 
         DetailTitleTextBlock.Text = selected.Title;
-        DetailMetaTextBlock.Text = $"ID: {selected.Id}\nCWD: {selected.Cwd}\nRollout: {selected.Summary.RolloutPath}";
-        DetailFlagsTextBlock.Text = $"Flags: {selected.FlagsText}";
+        DetailMetaTextBlock.Text = $"ID {selected.Id}  |  {selected.UpdatedText}  |  {selected.SizeText}\n{selected.Cwd}";
+        DetailFlagsTextBlock.Text = selected.FlagsText.Length == 0 ? "No recovery flags" : selected.FlagsText;
         ExportButton.IsEnabled = selected.Summary.RolloutExists;
         RemoveAnchorButton.IsEnabled = selected.Summary.IsAnchored;
 
@@ -214,12 +225,13 @@ public partial class MainWindow : Window
 
         var cancellation = new CancellationTokenSource();
         _previewCancellation = cancellation;
-        PreviewStatusTextBlock.Text = "Parsing preview...";
+        PreviewStatusTextBlock.Text = "Loading chat preview...";
         try
         {
             var parsed = await RolloutParser.ParseAsync(selected.Summary.RolloutPath, maxMessages: 300, cancellation.Token);
-            PreviewListBox.ItemsSource = parsed.Messages.Select(PreviewEntryViewModel.FromTranscriptEntry).ToArray();
-            PreviewStatusTextBlock.Text = $"Preview entries: {parsed.Messages.Count}. Parsed lines: {parsed.Report.ParsedLines}. Invalid lines: {parsed.Report.InvalidLines}.";
+            ChatItemsControl.ItemsSource = parsed.Messages.Select(ChatMessageViewModel.FromTranscriptEntry).ToArray();
+            PreviewStatusTextBlock.Text = $"Preview entries: {parsed.Messages.Count}. Parsed lines: {parsed.Report.ParsedLines}. Invalid lines: {parsed.Report.InvalidLines}. Export parses the full rollout.";
+            ChatScrollViewer.ScrollToTop();
         }
         catch (OperationCanceledException)
         {
@@ -234,7 +246,7 @@ public partial class MainWindow : Window
     {
         RefreshButton.IsEnabled = !isBusy;
         AnchorButton.IsEnabled = !isBusy;
-        ExportButton.IsEnabled = !isBusy && ThreadsGrid.SelectedItem is ThreadRowViewModel selected && selected.Summary.RolloutExists;
+        ExportButton.IsEnabled = !isBusy && _selectedThread?.Summary.RolloutExists == true;
         System.Windows.Input.Mouse.OverrideCursor = isBusy ? System.Windows.Input.Cursors.Wait : null;
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -258,6 +270,15 @@ public partial class MainWindow : Window
     }
 }
 
+public sealed class SidebarGroupViewModel(string title, IEnumerable<ThreadRowViewModel> threads)
+{
+    public string Title { get; } = title;
+
+    public ObservableCollection<ThreadRowViewModel> Threads { get; } = new(threads);
+
+    public string CountText => Threads.Count.ToString();
+}
+
 public sealed class ThreadRowViewModel(ThreadSummary summary)
 {
     public ThreadSummary Summary { get; } = summary;
@@ -276,7 +297,23 @@ public sealed class ThreadRowViewModel(ThreadSummary summary)
 
     public string FlagsText => Summary.Flags.Count == 0 ? "" : string.Join(", ", Summary.Flags);
 
+    public string SidebarMeta => $"{ProjectLabel}  {UpdatedText}";
+
     public bool IsSmoked => Summary.Flags.Any(flag => flag is RecoveryFlag.MissingFromSessionIndex or RecoveryFlag.ExtendedPath or RecoveryFlag.RolloutOnly or RecoveryFlag.DbOnlyMissingFile);
+
+    private string ProjectLabel
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Summary.NormalizedCwd))
+            {
+                return "No project";
+            }
+
+            var label = Path.GetFileName(Summary.NormalizedCwd);
+            return string.IsNullOrWhiteSpace(label) ? Summary.NormalizedCwd : label;
+        }
+    }
 
     private static string FormatBytes(long bytes)
     {
@@ -293,19 +330,43 @@ public sealed class ThreadRowViewModel(ThreadSummary summary)
     }
 }
 
-public sealed class PreviewEntryViewModel
+public sealed class ChatMessageViewModel
 {
     public required string Header { get; init; }
 
     public required string Text { get; init; }
 
-    public static PreviewEntryViewModel FromTranscriptEntry(TranscriptEntry entry)
+    public required HorizontalAlignment BubbleAlignment { get; init; }
+
+    public required Brush BubbleBackground { get; init; }
+
+    public required Brush BorderBrush { get; init; }
+
+    public required Brush HeaderBrush { get; init; }
+
+    public required FontFamily FontFamily { get; init; }
+
+    public static ChatMessageViewModel FromTranscriptEntry(TranscriptEntry entry)
     {
         var phase = string.IsNullOrWhiteSpace(entry.Phase) ? string.Empty : $" / {entry.Phase}";
-        return new PreviewEntryViewModel
+        var isUser = entry.Role.Equals("user", StringComparison.OrdinalIgnoreCase);
+        var isTool = entry.Kind is TranscriptEntryKind.ToolCall or TranscriptEntryKind.ToolOutput;
+        var header = $"{entry.Role}{phase} / {entry.Kind} / line {entry.RawLineNumber}";
+
+        return new ChatMessageViewModel
         {
-            Header = $"{entry.Role}{phase} / {entry.Kind} / line {entry.RawLineNumber}",
-            Text = entry.Text
+            Header = header,
+            Text = entry.Text,
+            BubbleAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+            BubbleBackground = isUser ? BrushFrom("#F2EFE8") : isTool ? BrushFrom("#F6F6F6") : Brushes.White,
+            BorderBrush = isTool ? BrushFrom("#D8D6D0") : BrushFrom("#ECE9E3"),
+            HeaderBrush = isTool ? BrushFrom("#6F6C66") : BrushFrom("#4A4843"),
+            FontFamily = isTool ? new FontFamily("Consolas") : new FontFamily("Segoe UI")
         };
+    }
+
+    private static Brush BrushFrom(string color)
+    {
+        return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
     }
 }
