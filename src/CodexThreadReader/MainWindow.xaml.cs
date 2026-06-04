@@ -28,6 +28,9 @@ public partial class MainWindow : Window
     private ThreadRowViewModel? _selectedThread;
     private ParsedThreadPage? _currentPage;
     private int _currentPageIndex;
+    private CancellationTokenSource? _contentSearchCancellation;
+    private readonly HashSet<string> _contentMatchedThreadIds = new(StringComparer.OrdinalIgnoreCase);
+    private string _contentSearchQuery = string.Empty;
     private bool _initializingTheme;
 
     public MainWindow()
@@ -60,6 +63,7 @@ public partial class MainWindow : Window
 
     private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
+        StartContentSearch();
         ApplyFilters();
     }
 
@@ -174,9 +178,10 @@ public partial class MainWindow : Window
                 _allThreads.Add(new ThreadRowViewModel(thread));
             }
 
-            ApplyFilters();
             var errorText = result.Errors.Count == 0 ? string.Empty : " Errors: " + string.Join(" | ", result.Errors);
             SetStatus($"Loaded {_allThreads.Count} threads. Anchors: {_anchorStore.ThreadIds.Count}.{errorText}");
+            StartContentSearch();
+            ApplyFilters();
         }
         catch (Exception ex)
         {
@@ -208,17 +213,24 @@ public partial class MainWindow : Window
         }
     }
 
-    private static bool MatchesSearch(ThreadRowViewModel thread, string search)
+    private bool MatchesSearch(ThreadRowViewModel thread, string search)
     {
         if (string.IsNullOrWhiteSpace(search))
         {
             return true;
         }
 
-        return thread.Id.Contains(search, StringComparison.OrdinalIgnoreCase)
+        var metadataMatch = thread.Id.Contains(search, StringComparison.OrdinalIgnoreCase)
             || thread.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
             || thread.Cwd.Contains(search, StringComparison.OrdinalIgnoreCase)
             || thread.FlagsText.Contains(search, StringComparison.OrdinalIgnoreCase);
+        if (metadataMatch)
+        {
+            return true;
+        }
+
+        return search.Equals(_contentSearchQuery, StringComparison.OrdinalIgnoreCase)
+            && _contentMatchedThreadIds.Contains(thread.Id);
     }
 
     private static bool MatchesFilter(ThreadRowViewModel thread, string filter)
@@ -231,6 +243,93 @@ public partial class MainWindow : Window
             "Archived" => thread.Summary.IsArchived,
             _ => true
         };
+    }
+
+    private void StartContentSearch()
+    {
+        _contentSearchCancellation?.Cancel();
+        _contentMatchedThreadIds.Clear();
+        _contentSearchQuery = SearchTextBox?.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(_contentSearchQuery))
+        {
+            return;
+        }
+
+        var threads = _allThreads
+            .Where(thread => thread.Summary.RolloutExists)
+            .ToArray();
+        if (threads.Length == 0)
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _contentSearchCancellation = cancellation;
+        SetStatus($"Searching transcript content for \"{_contentSearchQuery}\" across {threads.Length} threads...");
+        _ = RunContentSearchAsync(_contentSearchQuery, threads, cancellation.Token);
+    }
+
+    private async Task RunContentSearchAsync(string query, IReadOnlyList<ThreadRowViewModel> threads, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Run(
+                async () =>
+                {
+                    var scanned = 0;
+                    var hits = 0;
+                    foreach (var thread in threads)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var matched = await ThreadContentSearch.ContainsAsync(thread.Summary, query, cancellationToken).ConfigureAwait(false);
+                        scanned++;
+                        if (matched)
+                        {
+                            hits++;
+                        }
+
+                        if (matched || scanned % 25 == 0 || scanned == threads.Count)
+                        {
+                            await Dispatcher.InvokeAsync(() =>
+                            {
+                                if (!IsCurrentContentSearch(query, cancellationToken))
+                                {
+                                    return;
+                                }
+
+                                if (matched)
+                                {
+                                    _contentMatchedThreadIds.Add(thread.Id);
+                                    ApplyFilters();
+                                }
+
+                                var suffix = scanned == threads.Count ? "complete" : "running";
+                                SetStatus($"Transcript search {suffix} for \"{query}\": scanned {scanned}/{threads.Count}, content hits {hits}.");
+                            });
+                        }
+                    }
+                },
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (query.Equals(_contentSearchQuery, StringComparison.OrdinalIgnoreCase))
+                {
+                    SetStatus($"Transcript search failed for \"{query}\": {ex.Message}");
+                }
+            });
+        }
+    }
+
+    private bool IsCurrentContentSearch(string query, CancellationToken cancellationToken)
+    {
+        return !cancellationToken.IsCancellationRequested
+            && query.Equals(_contentSearchQuery, StringComparison.OrdinalIgnoreCase);
     }
 
     private Task LoadPreviewAsync(ThreadRowViewModel? selected)

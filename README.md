@@ -17,6 +17,7 @@ It does not write to `.codex`, repair Codex state, or call Codex APIs.
 
 - Enumerates active, archived, hidden, and rollout-only threads.
 - Groups threads by Codex project label, then Active/Archived state, with anchored threads sorted first inside their project.
+- Searches thread metadata immediately and scans rollout transcript content in the background for slower full-thread matches.
 - Shows recovery flags such as `Anchored`, `Archived`, `MissingFromSessionIndex`, `ExtendedPath`, `RolloutOnly`, `DbOnlyMissingFile`, and `LargeRollout`.
 - Lets you persistently anchor a thread ID at the top of the list even when Codex Desktop cannot show it.
 - Resolves sidebar titles from Codex's session index or rollout title events before falling back to compacted SQLite text.
